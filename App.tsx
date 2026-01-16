@@ -43,6 +43,8 @@ const App: React.FC = () => {
     const handleOnline = () => { 
       setIsOnline(true); 
       updateNetworkInfo(); 
+      // Simulate checking for server updates when coming back online
+      checkForConflicts();
     };
     const handleOffline = () => { 
       setIsOnline(false); 
@@ -73,6 +75,21 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const checkForConflicts = useCallback(() => {
+    setDataList(current => current.map(item => {
+      // Logic: If item is locally dirty and we simulate a server update (random chance)
+      if (item.isDirty && Math.random() > 0.5) {
+        const choice = window.confirm(`Sync Conflict for ${item.title}: Server has a newer version. \n\nClick OK to keep LOCAL changes, Cancel to use SERVER version.`);
+        if (choice) {
+          return { ...item, status: SyncStatus.DOWNLOADED, isDirty: true };
+        } else {
+          return { ...item, status: SyncStatus.OUT_OF_SYNC, isDirty: false };
+        }
+      }
+      return item;
+    }));
+  }, []);
+
   const handleDownload = useCallback(async () => {
     if (syncing || !isOnline) return;
     setSyncing(true);
@@ -82,11 +99,11 @@ const App: React.FC = () => {
       if (isCancelled.current) break;
       if (item.status === SyncStatus.DOWNLOADED) continue;
       
-      setDataList(prev => prev.map(d => d.id === item.id ? { ...d, status: SyncStatus.DOWNLOADING, progress: 10 } : d));
+      setDataList(prev => prev.map(d => d.id === item.id ? { ...d, status: SyncStatus.DOWNLOADING, progress: 5 } : d));
       
       for (let p = 20; p <= 100; p += 20) {
         if (isCancelled.current) break;
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
         setDataList(prev => prev.map(d => d.id === item.id ? { ...d, progress: p } : d));
       }
 
@@ -104,26 +121,44 @@ const App: React.FC = () => {
   const stopDownload = () => {
     isCancelled.current = true;
     setSyncing(false);
-    // Reset any items that were stuck in DOWNLOADING status
-    setDataList(prev => prev.map(d => d.status === SyncStatus.DOWNLOADING ? { ...d, status: SyncStatus.UNDOWNLOADED, progress: 0 } : d));
+    setDataList(prev => prev.map(d => 
+      d.status === SyncStatus.DOWNLOADING 
+        ? { ...d, status: SyncStatus.UNDOWNLOADED, progress: 0 } 
+        : d
+    ));
   };
 
+  // Fixed the missing toggleOfflineUsage function
   const toggleOfflineUsage = (active: boolean) => {
     setOfflineModeActive(active);
+  };
+
+  const handleShare = (title: string) => {
+    if (window.confirm(`Do you want to share the metadata for "${title}"?`)) {
+      console.log(`Simulating share for: ${title}`);
+      alert(`Shared: ${title}`);
+    }
   };
 
   const categorizedData = useMemo(() => ({
     undownloaded: dataList.filter(d => d.status === SyncStatus.UNDOWNLOADED),
     downloading: dataList.filter(d => d.status === SyncStatus.DOWNLOADING),
-    downloaded: dataList.filter(d => d.status === SyncStatus.DOWNLOADED)
+    downloaded: dataList.filter(d => d.status === SyncStatus.DOWNLOADED || d.status === SyncStatus.OUT_OF_SYNC)
   }), [dataList]);
 
-  // Dynamically calculate total data downloaded in MB (Simulated 24.5MB per item)
   const totalDataMB = useMemo(() => (categorizedData.downloaded.length * 24.5).toFixed(1), [categorizedData.downloaded]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-['Outfit']">
-      <nav className="fixed top-0 left-0 right-0 h-20 bg-[#050505]/95 backdrop-blur-2xl border-b border-white/5 z-50 flex items-center justify-between px-8 lg:px-12">
+      {/* Persistent Offline Mode Banner */}
+      {offlineModeActive && (
+        <div className="fixed top-0 left-0 right-0 h-8 bg-[#d40511] z-[100] flex items-center justify-center gap-3 shadow-lg">
+          <div className="w-2 h-2 rounded-full bg-white status-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Offline Mode Active</span>
+        </div>
+      )}
+
+      <nav className={`fixed ${offlineModeActive ? 'top-8' : 'top-0'} left-0 right-0 h-20 bg-[#050505]/95 backdrop-blur-2xl border-b border-white/5 z-50 flex items-center justify-between px-8 lg:px-12 transition-all duration-300`}>
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-[#d40511] flex items-center justify-center font-black italic shadow-[0_0_20px_#d4051144]">OS</div>
           <h1 className="text-2xl font-black tracking-tighter uppercase italic">OFFGRID <span className="text-[#d40511] not-italic">SYNC</span></h1>
@@ -142,7 +177,7 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      <div className="pt-28 pb-12 px-8 lg:px-12 max-w-7xl mx-auto">
+      <div className={`pt-${offlineModeActive ? '36' : '28'} pb-12 px-8 lg:px-12 max-w-7xl mx-auto transition-all duration-300`}>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           
           <div className="lg:col-span-4 space-y-6">
@@ -161,7 +196,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-emerald-500 shadow-[0_0_10px_#10b981]" 
+                      className="h-full bg-emerald-500 shadow-[0_0_10px_#10b981] transition-all duration-500" 
                       style={{ width: categorizedData.downloaded.length > 0 ? '100%' : '0%' }}
                     />
                   </div>
@@ -173,7 +208,7 @@ const App: React.FC = () => {
                     <p className="text-xs font-bold text-white truncate">{isOnline ? networkInfo.name : '---'}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] text-zinc-600 font-black uppercase">Download Speed</p>
+                    <p className="text-[9px] text-zinc-600 font-black uppercase">Speed</p>
                     <p className="text-xs font-bold text-white">{isOnline ? networkInfo.speed : '0 Mbps'}</p>
                   </div>
                 </div>
@@ -190,7 +225,7 @@ const App: React.FC = () => {
                   ) : (
                     <button 
                       onClick={stopDownload}
-                      className="w-full py-4 bg-[#d40511] hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all animate-pulse shadow-[0_0_20px_#d4051166]"
+                      className="w-full py-4 bg-[#d40511] hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_#d4051166]"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
                       Stop Download
@@ -215,27 +250,6 @@ const App: React.FC = () => {
                 </div>
               </div>
             </section>
-
-            <div className="p-6 bg-zinc-900/40 border border-white/5 rounded-sm">
-               <div className="flex justify-between items-center mb-4">
-                  <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">WiFi Sync Tracking</p>
-                  <span className={`w-2 h-2 rounded-full ${syncing ? 'bg-[#d40511] status-pulse' : 'bg-zinc-800'}`} />
-               </div>
-               <div className="space-y-3">
-                  <div className="flex justify-between text-xs items-center">
-                    <span className="text-zinc-500 font-bold uppercase tracking-tighter">Awaiting Signal</span>
-                    <span className="bg-zinc-800 px-2 py-0.5 rounded font-black text-[10px]">{categorizedData.undownloaded.length}</span>
-                  </div>
-                  <div className="flex justify-between text-xs items-center">
-                    <span className="text-zinc-500 font-bold uppercase tracking-tighter">In Transfer</span>
-                    <span className="text-[#d40511] font-black text-[10px]">{categorizedData.downloading.length}</span>
-                  </div>
-                  <div className="flex justify-between text-xs items-center">
-                    <span className="text-zinc-500 font-bold uppercase tracking-tighter">Secured Local</span>
-                    <span className="text-emerald-500 font-black text-[10px]">{categorizedData.downloaded.length}</span>
-                  </div>
-               </div>
-            </div>
           </div>
 
           <div className="lg:col-span-8 relative">
@@ -250,7 +264,7 @@ const App: React.FC = () => {
                 </div>
                 <h2 className="text-2xl font-black uppercase mb-4 tracking-tight">Active WiFi Link</h2>
                 <p className="text-zinc-500 max-w-sm text-sm font-medium leading-relaxed italic">
-                  "WiFi signal is currently live. Download your data to the left, then use the 'Connect' button to switch into Offline Local mode."
+                  "WiFi signal is live. Save data to the vault, then connect to access it offline."
                 </p>
               </div>
             ) : (
@@ -269,10 +283,6 @@ const App: React.FC = () => {
                   </div>
                   {offlineModeActive && (
                     <div className="flex items-center gap-4">
-                      <div className="flex flex-col items-end">
-                        <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Vault Secure</span>
-                        <span className="text-[10px] font-mono opacity-50 tracking-tighter">MODE: OFFLINE-READ</span>
-                      </div>
                       <div className="w-12 h-12 rounded border border-emerald-500/20 flex items-center justify-center bg-emerald-500/5">
                         <svg className="w-6 h-6 text-emerald-500 status-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
                       </div>
@@ -282,30 +292,18 @@ const App: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {(offlineModeActive ? categorizedData.downloaded : dataList).map(item => (
-                    <DataCard key={item.id} data={item} />
+                    <DataCard 
+                      key={item.id} 
+                      data={item} 
+                      onShare={() => handleShare(item.title)}
+                    />
                   ))}
-                  {(offlineModeActive && categorizedData.downloaded.length === 0) && (
-                    <div className="col-span-full py-40 text-center border border-white/5 border-dashed rounded-sm bg-black/20">
-                      <p className="text-zinc-600 font-black uppercase tracking-widest text-xs">Local memory is empty. Awaiting WiFi download.</p>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
           </div>
-
         </div>
       </div>
-
-      {!isOnline && (
-        <div className="fixed bottom-0 left-0 right-0 bg-[#d40511] py-3 px-8 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(212,5,17,0.4)]">
-          <div className="flex items-center gap-4">
-            <div className="w-2 h-2 rounded-full bg-white status-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">WiFi Signal Lost // Offline Safe Mode Active</span>
-          </div>
-          <span className="text-[10px] font-mono font-bold tracking-tighter">DATA INTEGRITY: VERIFIED</span>
-        </div>
-      )}
     </div>
   );
 };
