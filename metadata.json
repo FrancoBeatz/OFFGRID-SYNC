@@ -1,0 +1,7 @@
+{
+  "name": "OFFGRID SYNC",
+  "description": "Securely download and cache authorized data for seamless offline access. Your data. Anytime. Anywhere. Even offline.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
