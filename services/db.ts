@@ -1,9 +1,9 @@
 
-import { UserData, SyncStatus } from '../types';
+import { UserData } from '../types';
 
 const DB_NAME = 'OffgridSyncDB';
 const STORE_NAME = 'offline_data';
-const VERSION = 1;
+const VERSION = 2;
 
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -25,11 +25,17 @@ export const saveOfflineData = async (data: UserData): Promise<void> => {
   const db = await initDB();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  store.put(data);
+  store.put({ ...data, lastModified: data.lastModified || Date.now() });
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+};
+
+export const deleteOfflineData = async (id: string): Promise<void> => {
+  const db = await initDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
 };
 
 export const getAllOfflineData = async (): Promise<UserData[]> => {
@@ -45,7 +51,7 @@ export const getAllOfflineData = async (): Promise<UserData[]> => {
 };
 
 export const clearLocalData = async (): Promise<void> => {
-    const db = await initDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).clear();
+  const db = await initDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).clear();
 };
