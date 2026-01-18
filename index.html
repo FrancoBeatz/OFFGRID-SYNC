@@ -25,14 +25,12 @@
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
 </head>
-<body x-data="syncApp()">
-    <!-- Root element for React mounting if needed -->
+<body x-data="syncApp()" x-init="init()">
     <div id="root"></div>
 
     <!-- AUTH GATEWAY -->
@@ -80,23 +78,23 @@
             </div>
 
             <div class="flex items-center gap-6">
-                <div class="hidden md:flex flex-col text-right">
-                    <span class="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Operator Session</span>
-                    <span class="text-xs font-bold tracking-tight" x-text="user.name"></span>
-                </div>
-                
-                <!-- OFFLINE CONNECT BUTTONS -->
+                <!-- OFFLINE DATA CONNECTION CONTROLS -->
                 <div class="flex items-center bg-zinc-900/50 p-1 border border-white/5">
                     <button @click="toggleGoLive(true)" 
                         class="px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all"
                         :class="goLive ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'">
-                        GO LIVE (OFFLINE DATA)
+                        CONNECT OFFLINE DATA
                     </button>
                     <button @click="toggleGoLive(false)" 
                         class="px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all"
-                        :class="!goLive ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'">
-                        STOP USING OFFLINE
+                        :class="!goLive ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white'">
+                        STANDBY
                     </button>
+                </div>
+
+                <div class="hidden md:flex flex-col text-right ml-4">
+                    <span class="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Operator Session</span>
+                    <span class="text-xs font-bold tracking-tight" x-text="user.name"></span>
                 </div>
 
                 <button @click="logout" class="text-zinc-500 hover:text-white transition-colors ml-4">
@@ -137,7 +135,7 @@
             <!-- CONTENT GRID -->
             <section class="lg:col-span-9 space-y-6" :class="(goLive || isOnline) ? '' : 'locked-state'">
                 <div x-show="goLive" class="bg-emerald-500/10 border border-emerald-500/20 p-4 mb-6">
-                    <p class="text-emerald-500 text-[10px] font-black uppercase tracking-[0.3em] text-center">ISOLATION PROTOCOL ACTIVE: ACCESSING LOCAL DECRYPTED CACHE ONLY</p>
+                    <p class="text-emerald-500 text-[10px] font-black uppercase tracking-[0.3em] text-center">ISOLATION PROTOCOL ACTIVE: ACCESSING LOCAL SECURED DATA ONLY</p>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -197,6 +195,7 @@
                     { id: 'OS-103', title: 'Emergency Override Fieldbook', category: 'MANUAL', content: 'Digital procedures for manual hardware bypass.', status: 'UNDOWNLOADED', progress: 0, weight: 220 },
                     { id: 'OS-104', title: 'Auth-K Master Registry', category: 'AUTH', content: 'Offline decryption seeds for multi-device sync.', status: 'UNDOWNLOADED', progress: 0, weight: 180 },
                     { id: 'OS-105', title: 'Topo-Mapping Delta V4', category: 'GEO', content: 'High-res volumetric terrain data for global nav.', status: 'UNDOWNLOADED', progress: 0, weight: 3400 },
+                    { id: 'OS-106', title: 'Security Protocol Alpha', category: 'AUTH', content: 'Hardened security signatures for offline verification.', status: 'UNDOWNLOADED', progress: 0, weight: 450 },
                 ],
 
                 init() {
