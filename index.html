@@ -1,11 +1,11 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OFFGRID SYNC | Save Your Data</title>
+    <title>OFFGRID SYNC | Secure Data Vault</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -18,6 +18,7 @@
             color: white;
             font-family: 'Outfit', sans-serif;
             overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
         .status-pulse {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -26,39 +27,423 @@
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: .5; transform: scale(1.1); }
         }
-        .stagger-in {
-            opacity: 0;
-            transform: translateY(10px);
-            animation: fadeIn 0.6s forwards;
-        }
-        @keyframes fadeIn {
-            to { opacity: 1; transform: translateY(0); }
-        }
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #050505;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #222;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #d40511;
-        }
+        .red-glow { box-shadow: 0 0 20px rgba(212, 5, 17, 0.3); }
+        .emerald-glow { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+        [x-cloak] { display: none !important; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; }
+        ::-webkit-scrollbar-thumb:hover { background: #d40511; }
     </style>
 <script type="importmap">
 {
   "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>
 </head>
-<body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+<body x-data="syncApp()" x-init="init()" class="selection:bg-red-600 selection:text-white">
+
+    <!-- Offline Mode Banner -->
+    <div x-show="offlineModeActive" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="-translate-y-full"
+         x-transition:enter-end="translate-y-0"
+         class="fixed top-0 left-0 right-0 h-8 bg-[#d40511] z-[100] flex items-center justify-center gap-3 shadow-lg border-b border-black/20" x-cloak>
+        <div class="w-2 h-2 rounded-full bg-white status-pulse"></div>
+        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-white">Offline Local Mode Active</span>
+    </div>
+
+    <!-- Navigation -->
+    <nav :class="offlineModeActive ? 'top-8' : 'top-0'" 
+         class="fixed left-0 right-0 h-20 bg-[#050505]/95 backdrop-blur-2xl border-b border-white/5 z-50 flex items-center justify-between px-8 lg:px-12 transition-all duration-300">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-[#d40511] flex items-center justify-center font-black italic shadow-[0_0_20px_rgba(212,5,17,0.3)]">OS</div>
+            <h1 class="text-2xl font-black tracking-tighter uppercase italic leading-none hidden sm:block">
+                OFFGRID <span class="text-[#d40511] not-italic">SYNC</span>
+            </h1>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <div class="flex flex-col items-end">
+                <span class="text-[10px] font-black text-zinc-500 uppercase tracking-widest" 
+                      x-text="!isOnline ? 'SIGNAL INTERRUPTED' : 'LINK: ' + networkInfo.type"></span>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold uppercase tracking-tight" x-text="isOnline ? networkInfo.name : 'OFFLINE'"></span>
+                    <div :class="isOnline ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] status-pulse' : 'bg-red-500'" 
+                         class="w-3 h-3 rounded-full border border-black/40"></div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="pt-32 pb-12 px-6 lg:px-12 max-w-7xl mx-auto transition-all duration-300">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            
+            <!-- Sidebar / Stats -->
+            <div class="lg:col-span-4 space-y-6">
+                <section class="bg-zinc-900 p-8 border border-white/5 rounded-sm shadow-2xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-3">
+                        <span class="text-[8px] font-black bg-[#d40511]/10 text-[#d40511] px-2 py-0.5 rounded border border-[#d40511]/20 uppercase tracking-widest">Unlimited Vault</span>
+                    </div>
+
+                    <h3 class="text-xs font-black text-[#d40511] uppercase tracking-[0.3em] mb-6">Storage Core</h3>
+                    
+                    <div class="space-y-6">
+                        <div class="bg-black/40 p-5 rounded-sm border border-white/5">
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-zinc-500 text-[10px] font-black uppercase">Local Memory Used</span>
+                                <span class="text-2xl font-black text-white" x-text="stats.totalMB + ' MB'"></span>
+                            </div>
+                            <div class="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 shadow-[0_0_10px_#10b981] transition-all duration-700 ease-in-out" 
+                                     :style="'width: ' + (stats.downloadedCount > 0 ? (stats.downloadedCount / dataList.length * 100) : 0) + '%'"></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 py-4 border-y border-white/5">
+                            <div>
+                                <p class="text-[9px] text-zinc-600 font-black uppercase">Active Link</p>
+                                <p class="text-xs font-bold text-white truncate" x-text="isOnline ? networkInfo.name : '---'"></p>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-zinc-600 font-black uppercase">Current Speed</p>
+                                <p class="text-xs font-bold text-white" x-text="isOnline ? networkInfo.speed : '0 Mbps'"></p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <template x-if="!syncing">
+                                <button @click="startDownload()" 
+                                        :disabled="!isOnline || stats.undownloadedCount === 0"
+                                        class="w-full relative px-8 py-4 font-black uppercase tracking-widest text-sm transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 bg-[#d40511] text-white hover:bg-red-700 red-glow disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
+                                    Download All
+                                </button>
+                            </template>
+                            <template x-if="syncing">
+                                <button @click="stopDownload()"
+                                        class="w-full py-4 bg-[#d40511] hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(212,5,17,0.4)] animate-pulse">
+                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Stop Transfer
+                                </button>
+                            </template>
+                            
+                            <div class="grid grid-cols-2 gap-3">
+                                <button @click="toggleOffline(true)"
+                                        :disabled="stats.downloadedCount === 0"
+                                        :class="offlineModeActive ? 'bg-emerald-500 border-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'bg-transparent border-white/10 text-zinc-500 hover:border-white/30'"
+                                        class="py-4 text-[10px] font-black uppercase tracking-widest border transition-all disabled:opacity-30">
+                                    Connect
+                                </button>
+                                <button @click="toggleOffline(false)"
+                                        :class="!offlineModeActive ? 'bg-zinc-800 border-zinc-800 text-zinc-500' : 'bg-transparent border-white/10 text-white hover:border-[#d40511]'"
+                                        class="py-4 text-[10px] font-black uppercase tracking-widest border transition-all">
+                                    Disconnect
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="p-6 bg-zinc-900/40 border border-white/5 rounded-sm">
+                   <div class="flex justify-between items-center mb-4">
+                      <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Network Transfer Queue</p>
+                      <span :class="syncing ? 'bg-[#d40511] status-pulse' : 'bg-zinc-800'" class="w-2 h-2 rounded-full"></span>
+                   </div>
+                   <div class="space-y-3">
+                      <div class="flex justify-between text-xs items-center">
+                        <span class="text-zinc-500 font-bold uppercase tracking-tighter">Remote Only</span>
+                        <span class="bg-zinc-800 px-2 py-0.5 rounded font-black text-[10px]" x-text="stats.undownloadedCount"></span>
+                      </div>
+                      <div class="flex justify-between text-xs items-center">
+                        <span class="text-zinc-500 font-bold uppercase tracking-tighter">Active Stream</span>
+                        <span class="text-[#d40511] font-black text-[10px]" x-text="stats.activeCount"></span>
+                      </div>
+                      <div class="flex justify-between text-xs items-center">
+                        <span class="text-zinc-500 font-bold uppercase tracking-tighter">Vault Secured</span>
+                        <span class="text-emerald-500 font-black text-[10px]" x-text="stats.downloadedCount"></span>
+                      </div>
+                   </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="lg:col-span-8 relative">
+                <div x-show="offlineModeActive" class="absolute inset-0 pointer-events-none rounded-sm border border-emerald-500/10 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.03)_0%,transparent_100%)] z-0" x-cloak></div>
+
+                <div class="space-y-8 relative z-10">
+                    <header :class="offlineModeActive ? 'bg-[#050505]/95 border-emerald-500/20 shadow-emerald-900/10' : 'bg-zinc-900/60'"
+                            class="flex items-center justify-between p-8 border border-white/5 rounded-sm shadow-xl transition-all duration-500">
+                        <div>
+                            <div class="flex items-center gap-3 mb-2">
+                                <div :class="offlineModeActive ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : (isOnline ? 'bg-[#d40511]' : 'bg-zinc-700')" 
+                                     class="w-2 h-2 rounded-full"></div>
+                                <h2 class="text-2xl sm:text-3xl font-black uppercase tracking-tighter" x-text="offlineModeActive ? 'Offline Memory' : (isOnline ? 'WiFi Data Stream' : 'Limited Access')"></h2>
+                            </div>
+                            <p class="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2" 
+                               x-text="offlineModeActive ? 'Encrypted Local Node Running' : 'Centralized Link Integrity: Nominal'"></p>
+                        </div>
+                        <template x-if="offlineModeActive">
+                            <div class="hidden sm:flex items-center gap-4">
+                                <div class="flex flex-col items-end">
+                                    <span class="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Vault Secure</span>
+                                    <span class="text-[10px] font-mono opacity-50 tracking-tighter">MODE: OFFLINE-SAFE</span>
+                                </div>
+                                <div class="w-12 h-12 rounded border border-emerald-500/20 flex items-center justify-center bg-emerald-500/5">
+                                    <svg class="w-6 h-6 text-emerald-500 status-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                </div>
+                            </div>
+                        </template>
+                    </header>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <template x-for="item in filteredData" :key="item.id">
+                            <div class="group relative p-6 bg-[#111] border transition-all duration-500 hover:scale-[1.02] hover:z-10 rounded-sm overflow-hidden"
+                                 :class="item.status === 'DOWNLOADED' ? 'border-white/10 hover:border-[#d40511]/60 hover:shadow-[0_0_30px_rgba(212,5,17,0.15)]' : 'border-white/5 opacity-70'">
+                                
+                                <div x-show="item.status === 'DOWNLOADING'" 
+                                     class="absolute top-0 left-0 h-1 bg-zinc-800 w-full overflow-hidden">
+                                    <div class="h-full bg-[#d40511] transition-all duration-300 ease-out shadow-[0_0_10px_#d40511]" 
+                                         :style="'width: ' + item.progress + '%'"></div>
+                                </div>
+
+                                <div class="flex justify-between items-start mb-4">
+                                    <span class="text-[9px] font-black uppercase tracking-widest"
+                                          :class="item.status === 'DOWNLOADED' ? 'text-[#d40511]' : 'text-zinc-600'" 
+                                          x-text="item.category"></span>
+                                    <div class="flex items-center gap-2">
+                                        <template x-if="item.status === 'DOWNLOADED'">
+                                            <span class="text-[9px] font-black text-emerald-500 uppercase flex items-center gap-1">
+                                                <span class="w-1 h-1 rounded-full bg-current"></span> Ready
+                                            </span>
+                                        </template>
+                                        <template x-if="item.status === 'DOWNLOADING'">
+                                            <span class="text-[9px] font-black text-[#d40511] animate-pulse uppercase">Syncing...</span>
+                                        </template>
+                                        <template x-if="item.status === 'UNDOWNLOADED'">
+                                            <span class="text-[9px] font-black text-zinc-700 uppercase">Remote Only</span>
+                                        </template>
+                                    </div>
+                                </div>
+                                
+                                <h3 class="text-xl font-black mb-2 tracking-tight group-hover:text-[#d40511] transition-colors" x-text="item.title"></h3>
+                                <p class="text-zinc-500 text-sm leading-relaxed mb-6 line-clamp-2 font-medium" x-text="item.content"></p>
+                                
+                                <div class="flex items-center justify-between mt-auto">
+                                    <div class="flex flex-col text-[10px] font-mono text-zinc-700">
+                                        <span class="tracking-tighter" x-text="'ID: ' + item.id"></span>
+                                        <span x-text="formatDate(item.lastModified)"></span>
+                                    </div>
+                                    <button @click="shareData(item.title)" 
+                                            class="p-2 rounded border border-white/5 hover:bg-zinc-800 hover:border-[#d40511]/40 text-zinc-600 hover:text-white transition-all opacity-40 group-hover:opacity-100">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="offlineModeActive && filteredData.length === 0">
+                            <div class="col-span-full py-40 text-center border border-white/5 border-dashed rounded-sm bg-black/20">
+                                <p class="text-zinc-600 font-black uppercase tracking-widest text-xs">Local Memory Vault Empty</p>
+                                <p class="text-zinc-500 text-[10px] mt-2 font-medium">Download data while online to enable offline access.</p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Emergency Footer -->
+    <footer x-show="!isOnline" 
+            class="fixed bottom-0 left-0 right-0 bg-[#d40511] py-3 px-8 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(212,5,17,0.4)]" x-cloak>
+        <div class="flex items-center gap-4">
+            <div class="w-2 h-2 rounded-full bg-white status-pulse"></div>
+            <span class="text-[10px] font-black uppercase tracking-[0.5em]">Network Lost // Local Integrity Active</span>
+        </div>
+        <span class="text-[10px] font-mono font-bold tracking-tighter">DATA: DISCONNECTED</span>
+    </footer>
+
+    <script>
+        // Database Service (IndexedDB)
+        const DB_CONFIG = { name: 'OffgridSyncDB', version: 2, store: 'offline_data' };
+        
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_CONFIG.name, DB_CONFIG.version);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(DB_CONFIG.store)) {
+                        db.createObjectStore(DB_CONFIG.store, { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        };
+
+        const saveToDB = async (item) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(DB_CONFIG.store, 'readwrite');
+                tx.objectStore(DB_CONFIG.store).put(JSON.parse(JSON.stringify(item)));
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+        };
+
+        const getAllFromDB = async () => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(DB_CONFIG.store, 'readonly');
+                const request = tx.objectStore(DB_CONFIG.store).getAll();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = reject;
+            });
+        };
+
+        // Alpine.js Application Logic
+        function syncApp() {
+            return {
+                isOnline: navigator.onLine,
+                offlineModeActive: false,
+                syncing: false,
+                isCancelled: false,
+                networkInfo: { name: 'Detecting...', type: 'Unknown', speed: '0 Mbps' },
+                dataList: [
+                    { id: 'DATA-001', title: 'Network Config Pack', category: 'WIFI', content: 'Pre-cached local network settings for high-speed offline access.', lastModified: 1715340000000, status: 'UNDOWNLOADED', progress: 0 },
+                    { id: 'DATA-002', title: 'Offline Resource Bundle', category: 'SYSTEM', content: 'Core system assets and media files for disconnected browsing.', lastModified: 1715512800000, status: 'UNDOWNLOADED', progress: 0 },
+                    { id: 'DATA-003', title: 'Field Operations Guide', category: 'MANUAL', content: 'Step-by-step procedures for manual network overrides.', lastModified: 1715685600000, status: 'UNDOWNLOADED', progress: 0 },
+                    { id: 'DATA-004', title: 'Security Auth Keys', category: 'AUTH', content: 'Encrypted tokens required for offline device verification.', lastModified: 1715772000000, status: 'UNDOWNLOADED', progress: 0 },
+                    { id: 'DATA-005', title: 'Universal Map Data', category: 'GEO', content: 'High-resolution offline terrain mapping for global navigation.', lastModified: 1715858400000, status: 'UNDOWNLOADED', progress: 0 },
+                    { id: 'DATA-006', title: 'Asset Ledger Alpha', category: 'LOGS', content: 'Unlimited growth capacity log for decentralized storage testing.', lastModified: 1715944800000, status: 'UNDOWNLOADED', progress: 0 },
+                ],
+
+                async init() {
+                    this.updateNetwork();
+                    window.addEventListener('online', () => { 
+                        this.isOnline = true; 
+                        this.updateNetwork(); 
+                    });
+                    window.addEventListener('offline', () => { 
+                        this.isOnline = false; 
+                        this.updateNetwork(); 
+                        if(this.syncing) this.stopDownload(); 
+                    });
+                    
+                    if (navigator.connection) {
+                        navigator.connection.addEventListener('change', () => this.updateNetwork());
+                    }
+
+                    // Hydrate from DB
+                    try {
+                        const local = await getAllFromDB();
+                        if (local.length > 0) {
+                            this.dataList = this.dataList.map(remote => {
+                                const found = local.find(l => l.id === remote.id);
+                                return found || remote;
+                            });
+                        }
+                    } catch(e) { console.error("DB Hydration failed", e); }
+                    
+                    // Service Worker Registration
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('/sw.js');
+                    }
+                },
+
+                updateNetwork() {
+                    const conn = navigator.connection || {};
+                    this.networkInfo = {
+                        name: !this.isOnline ? 'Offline' : (conn.type === 'wifi' ? 'Home WiFi' : (conn.type === 'cellular' ? 'Cellular' : 'Direct Link')),
+                        type: !this.isOnline ? 'OFFLINE' : (conn.type?.toUpperCase() || 'NETWORK'),
+                        speed: !this.isOnline ? '0 Mbps' : (conn.downlink ? `${conn.downlink} Mbps` : 'Detecting...')
+                    };
+                },
+
+                get stats() {
+                    const downloaded = this.dataList.filter(d => d.status === 'DOWNLOADED');
+                    return {
+                        downloadedCount: downloaded.length,
+                        undownloadedCount: this.dataList.filter(d => d.status === 'UNDOWNLOADED').length,
+                        activeCount: this.dataList.filter(d => d.status === 'DOWNLOADING').length,
+                        totalMB: (downloaded.length * 24.5).toFixed(1)
+                    };
+                },
+
+                get filteredData() {
+                    if (this.offlineModeActive) {
+                        return this.dataList.filter(d => d.status === 'DOWNLOADED');
+                    }
+                    return this.dataList;
+                },
+
+                async startDownload() {
+                    if (this.syncing || !this.isOnline) return;
+                    this.syncing = true;
+                    this.isCancelled = false;
+
+                    for (let i = 0; i < this.dataList.length; i++) {
+                        if (this.isCancelled) break;
+                        const item = this.dataList[i];
+                        if (item.status === 'DOWNLOADED') continue;
+
+                        this.dataList[i].status = 'DOWNLOADING';
+                        this.dataList[i].progress = 0;
+
+                        // Simulated chunks
+                        for (let p = 10; p <= 100; p += 10) {
+                            if (this.isCancelled) break;
+                            await new Promise(r => setTimeout(r, 120));
+                            this.dataList[i].progress = p;
+                        }
+
+                        if (!this.isCancelled) {
+                            this.dataList[i].status = 'DOWNLOADED';
+                            this.dataList[i].lastModified = Date.now();
+                            await saveToDB({...this.dataList[i]});
+                        } else {
+                            this.dataList[i].status = 'UNDOWNLOADED';
+                            this.dataList[i].progress = 0;
+                        }
+                    }
+                    this.syncing = false;
+                },
+
+                stopDownload() {
+                    this.isCancelled = true;
+                    this.syncing = false;
+                    this.dataList.forEach(d => {
+                        if (d.status === 'DOWNLOADING') {
+                            d.status = 'UNDOWNLOADED';
+                            d.progress = 0;
+                        }
+                    });
+                },
+
+                toggleOffline(val) {
+                    this.offlineModeActive = val;
+                },
+
+                shareData(title) {
+                    if (confirm(`Share encrypted metadata for "${title}"?`)) {
+                        alert("Metadata packet prepared for distribution.");
+                    }
+                },
+
+                formatDate(timestamp) {
+                    const date = new Date(timestamp);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + date.toLocaleDateString();
+                }
+            };
+        }
+    </script>
 </body>
 </html>
