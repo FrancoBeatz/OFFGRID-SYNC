@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 
 const dataRecordSchema = mongoose.Schema({
+  owner: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
   id: { type: String, required: true, unique: true },
   title: { type: String, required: true },
   category: { type: String, required: true },

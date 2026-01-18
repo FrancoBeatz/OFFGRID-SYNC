@@ -23,7 +23,6 @@ const App: React.FC = () => {
   
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [checkingSync, setCheckingSync] = useState(false);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('os_user');
@@ -40,39 +39,47 @@ const App: React.FC = () => {
     localStorage.removeItem('os_user');
     setToken(null);
     setUser(null);
+    setDataList([]);
+    setTotalMB(0);
   };
 
   const loadVault = useCallback(async () => {
-    if (!token) return;
+    if (!token || !user) return;
     try {
-      setSyncPhase('Checking Delta...');
+      setSyncPhase('Verifying Identity...');
       const remoteSource = await fetchRemoteData();
       const local = await dbService.getAllOfflineData();
+      
+      // Filter local data to only show what belongs to the current user
+      const userLocal = local.filter(l => l.userId === user.id);
+      
       let currentTotal = 0;
       
       const merged = remoteSource.map(remote => {
-        const foundLocal = local.find(l => l.id === remote.id);
+        const foundLocal = userLocal.find(l => l.id === remote.id);
         if (foundLocal?.status === SyncStatus.DOWNLOADED) {
             currentTotal += 24.5;
             if (remote.lastModified > (foundLocal.lastModified || 0)) {
                 return { ...foundLocal, status: SyncStatus.OUT_OF_SYNC };
             }
         }
-        return foundLocal ? { ...remote, ...foundLocal } : { ...remote, status: SyncStatus.UNDOWNLOADED };
+        return foundLocal ? { ...remote, ...foundLocal } : { ...remote, status: SyncStatus.UNDOWNLOADED, userId: user.id };
       });
       
       setDataList(merged);
       setTotalMB(currentTotal);
-      setSyncPhase('Vault Integrated');
-      setTimeout(() => setSyncPhase(''), 3000);
+      setSyncPhase('Registry Linked');
+      setTimeout(() => setSyncPhase(''), 2000);
     } catch (err) {
-      setSyncPhase('Offline Mode Enabled');
+      setSyncPhase('Running Offline Buffer');
     }
-  }, [token]);
+  }, [token, user]);
 
   useEffect(() => {
-    loadVault();
-  }, [loadVault, isOnline]);
+    if (token && user) {
+      loadVault();
+    }
+  }, [loadVault, isOnline, token, user]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -84,18 +91,25 @@ const App: React.FC = () => {
   };
 
   const bulkAction = async (action: 'secure' | 'delete') => {
+    if (!user) return;
     setSyncing(true);
     const targets = dataList.filter(d => selectedIds.has(d.id));
     
     for (const item of targets) {
       if (action === 'secure') {
-        setSyncPhase(`Securing ${item.id}...`);
-        const updated = { ...item, status: SyncStatus.DOWNLOADED, progress: 100, lastModified: Date.now() };
+        setSyncPhase(`Encrypting ${item.id}...`);
+        const updated = { 
+          ...item, 
+          userId: user.id,
+          status: SyncStatus.DOWNLOADED, 
+          progress: 100, 
+          lastModified: Date.now() 
+        };
         await dbService.saveOfflineData(updated);
         setDataList(prev => prev.map(d => d.id === item.id ? updated : d));
         setTotalMB(p => p + 24.5);
       } else {
-        setSyncPhase(`Purging ${item.id}...`);
+        setSyncPhase(`Wiping ${item.id}...`);
         await dbService.deleteOfflineData(item.id);
         setDataList(prev => prev.map(d => d.id === item.id ? { ...item, status: SyncStatus.UNDOWNLOADED, progress: 0 } : d));
         setTotalMB(p => Math.max(0, p - 24.5));
@@ -105,7 +119,7 @@ const App: React.FC = () => {
     setSyncing(false);
     setSelectionMode(false);
     setSelectedIds(new Set());
-    setSyncPhase(action === 'secure' ? 'Bulk Secure Complete' : 'Purge Complete');
+    setSyncPhase(action === 'secure' ? 'Secure Buffer Complete' : 'Protocol: Purge Finished');
   };
 
   const displayData = useMemo(() => {
@@ -139,7 +153,7 @@ const App: React.FC = () => {
               <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Active Operator</span>
               <span className="text-xs font-bold">{user?.name}</span>
            </div>
-           <button onClick={handleLogout} className="text-[9px] font-black text-zinc-600 hover:text-red-500 uppercase tracking-widest border border-white/5 px-3 py-2 transition-all">Exit Vault</button>
+           <button onClick={handleLogout} className="text-[9px] font-black text-zinc-600 hover:text-red-500 uppercase tracking-widest border border-white/5 px-3 py-2 transition-all">Log Out</button>
            <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-600 animate-pulse'}`} />
         </div>
       </nav>
@@ -150,7 +164,7 @@ const App: React.FC = () => {
             <h3 className="text-[10px] font-black text-[#d40511] uppercase tracking-[0.3em] mb-6">Vault Metrics</h3>
             <div className="space-y-4">
               <div className="bg-black/40 p-4 border border-white/5">
-                <span className="block text-zinc-600 text-[8px] font-black uppercase mb-1">Local Capacity</span>
+                <span className="block text-zinc-600 text-[8px] font-black uppercase mb-1">Local Cache</span>
                 <span className="text-xl font-black">{(totalMB/1024).toFixed(2)} <span className="text-zinc-500 text-xs">GB</span></span>
                 <div className="w-full h-1 bg-zinc-800 mt-2"><div className="h-full bg-emerald-500" style={{ width: `${(totalMB/10000)*100}%` }} /></div>
               </div>
@@ -192,6 +206,11 @@ const App: React.FC = () => {
                 onToggleSelect={() => toggleSelect(item.id)}
               />
             ))}
+            {displayData.length === 0 && (
+              <div className="col-span-full py-20 text-center border border-dashed border-white/10 opacity-30">
+                <p className="text-[10px] font-black uppercase tracking-[0.5em]">No records found in registry</p>
+              </div>
+            )}
           </div>
         </section>
       </main>
@@ -199,11 +218,11 @@ const App: React.FC = () => {
       {/* Bulk Action Bar */}
       {selectionMode && selectedIds.size > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#d40511] px-8 py-4 flex items-center gap-8 shadow-2xl z-[150] rounded-sm">
-          <span className="text-xs font-black uppercase tracking-widest">{selectedIds.size} Items Targeted</span>
+          <span className="text-xs font-black uppercase tracking-widest">{selectedIds.size} Records Targeted</span>
           <div className="h-6 w-px bg-white/20" />
           <div className="flex gap-4">
             <button onClick={() => bulkAction('secure')} className="text-[10px] font-black uppercase tracking-widest hover:underline">Bulk Secure</button>
-            <button onClick={() => bulkAction('delete')} className="text-[10px] font-black uppercase tracking-widest hover:underline">Purge Local</button>
+            <button onClick={() => bulkAction('delete')} className="text-[10px] font-black uppercase tracking-widest hover:underline">Wipe Local</button>
           </div>
         </div>
       )}

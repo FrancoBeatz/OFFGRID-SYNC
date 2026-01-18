@@ -8,6 +8,7 @@ export enum SyncStatus {
 
 export interface UserData {
   id: string;
+  userId: string; // Linked to the authenticated user ID
   title: string;
   category: string;
   content: string;
