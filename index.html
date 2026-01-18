@@ -4,48 +4,281 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OFFGRID SYNC | Secure Data Vault</title>
+    <title>OFFGRID SYNC | Secure Tactical Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --dhl-red: #d40511;
-            --offgrid-black: #0a0a0a;
-        }
-        body {
-            margin: 0;
-            background-color: var(--offgrid-black);
-            color: white;
-            font-family: 'Outfit', sans-serif;
-            overflow-x: hidden;
-        }
+        :root { --os-red: #d40511; --os-black: #0a0a0a; }
+        body { background-color: var(--os-black); color: white; font-family: 'Outfit', sans-serif; overflow-x: hidden; }
+        [x-cloak] { display: none !important; }
         .progress-stripe {
-            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
+            background-image: linear-gradient(45deg, rgba(255,255,255,.1) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.1) 75%, transparent 75%, transparent);
             background-size: 1rem 1rem;
-            animation: progress-move 1s linear infinite;
+            animation: progress-move 2s linear infinite;
         }
-        @keyframes progress-move {
-            from { background-position: 1rem 0; }
-            to { background-position: 0 0; }
-        }
-        .red-glow { box-shadow: 0 0 20px rgba(212, 5, 17, 0.3); }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: #0a0a0a; }
-        ::-webkit-scrollbar-thumb { background: #333; }
-        ::-webkit-scrollbar-thumb:hover { background: #d40511; }
+        @keyframes progress-move { from { background-position: 1rem 0; } to { background-position: 0 0; } }
+        .red-glow { box-shadow: 0 0 30px rgba(212, 5, 17, 0.15); }
+        .locked-state { filter: grayscale(1) opacity(0.3); pointer-events: none; transition: all 0.5s ease; }
     </style>
-    <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@^18.2.0",
-        "react-dom/": "https://esm.sh/react-dom@^18.2.0/",
-        "react/": "https://esm.sh/react@^18.2.0/"
-      }
-    }
-    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
 </head>
-<body>
+<body x-data="syncApp()">
+    <!-- Root element for React mounting if needed -->
     <div id="root"></div>
-    <script type="module" src="index.tsx"></script>
+
+    <!-- AUTH GATEWAY -->
+    <template x-if="!authorized">
+        <div class="fixed inset-0 z-[200] flex items-center justify-center bg-[#0a0a0a] p-6">
+            <div class="w-full max-w-md bg-zinc-900 border border-white/10 p-10 relative overflow-hidden red-glow">
+                <div class="absolute top-0 left-0 w-full h-1 bg-[#d40511]"></div>
+                <div class="text-center mb-8">
+                    <div class="inline-block w-12 h-12 bg-[#d40511] mb-4 flex items-center justify-center font-black italic text-xl shadow-[0_0_20px_rgba(212,5,17,0.4)]">OS</div>
+                    <h2 class="text-3xl font-black uppercase tracking-tighter italic">OFFGRID <span class="text-[#d40511] not-italic">SYNC</span></h2>
+                    <p class="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2">Identity Registry required</p>
+                </div>
+
+                <form @submit.prevent="handleAuth" class="space-y-4">
+                    <template x-if="!isLogin">
+                        <input type="text" x-model="authForm.name" placeholder="OPERATOR NAME" required class="w-full bg-black border border-white/5 p-4 text-xs font-bold uppercase tracking-widest focus:border-[#d40511] outline-none">
+                    </template>
+                    <input type="email" x-model="authForm.email" placeholder="NETWORK ID (EMAIL)" required class="w-full bg-black border border-white/5 p-4 text-xs font-bold uppercase tracking-widest focus:border-[#d40511] outline-none">
+                    <input type="password" x-model="authForm.password" placeholder="CLEARANCE KEY" required class="w-full bg-black border border-white/5 p-4 text-xs font-bold uppercase tracking-widest focus:border-[#d40511] outline-none">
+                    
+                    <button type="submit" class="w-full bg-[#d40511] text-white py-4 font-black uppercase tracking-[0.2em] text-xs hover:bg-red-700 transition-all flex items-center justify-center gap-2">
+                        <span x-text="loading ? 'AUTHORIZING...' : (isLogin ? 'ENTER VAULT' : 'CREATE REGISTRY')"></span>
+                    </button>
+                    <p x-show="error" class="text-red-500 text-[10px] font-black text-center uppercase" x-text="error"></p>
+                </form>
+
+                <button @click="isLogin = !isLogin; error = ''" class="w-full mt-6 text-[10px] font-black text-zinc-500 hover:text-white uppercase tracking-[0.2em]" x-text="isLogin ? 'REQUEST NEW CLEARANCE' : 'EXISTING OPERATOR?'"></button>
+            </div>
+        </div>
+    </template>
+
+    <!-- MAIN INTERFACE -->
+    <div x-show="authorized" x-cloak class="min-h-screen">
+        <!-- HEADER -->
+        <nav class="fixed top-0 left-0 right-0 h-20 bg-black/95 backdrop-blur-xl border-b border-white/5 z-50 flex items-center justify-between px-6 md:px-12">
+            <div class="flex items-center gap-6">
+                <div class="w-10 h-10 bg-[#d40511] flex items-center justify-center font-black italic text-lg">OS</div>
+                <div>
+                    <h1 class="text-xl font-black uppercase tracking-tighter italic">OFFGRID <span class="text-[#d40511] not-italic">SYNC</span></h1>
+                    <div class="flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full" :class="isOnline ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500 animate-pulse'"></span>
+                        <p class="text-[8px] font-black uppercase tracking-[0.2em]" :class="isOnline ? 'text-emerald-500' : 'text-red-500'" x-text="isOnline ? 'NETWORK LINK ACTIVE' : 'NETWORK ISOLATION'"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <div class="hidden md:flex flex-col text-right">
+                    <span class="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Operator Session</span>
+                    <span class="text-xs font-bold tracking-tight" x-text="user.name"></span>
+                </div>
+                
+                <!-- OFFLINE CONNECT BUTTONS -->
+                <div class="flex items-center bg-zinc-900/50 p-1 border border-white/5">
+                    <button @click="toggleGoLive(true)" 
+                        class="px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all"
+                        :class="goLive ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'">
+                        GO LIVE (OFFLINE DATA)
+                    </button>
+                    <button @click="toggleGoLive(false)" 
+                        class="px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all"
+                        :class="!goLive ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'">
+                        STOP USING OFFLINE
+                    </button>
+                </div>
+
+                <button @click="logout" class="text-zinc-500 hover:text-white transition-colors ml-4">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                </button>
+            </div>
+        </nav>
+
+        <main class="pt-32 pb-32 px-6 md:px-12 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <!-- SIDEBAR -->
+            <aside class="lg:col-span-3 space-y-6">
+                <div class="bg-zinc-900 p-6 border border-white/5 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-[#d40511]"></div>
+                    <h3 class="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] mb-4">Local Buffer Dynamics</h3>
+                    <div class="bg-black/40 p-4 border border-white/5 mb-4">
+                        <span class="block text-zinc-600 text-[8px] font-black uppercase mb-1">Capacity Used (Max 10GB)</span>
+                        <span class="text-2xl font-black" x-text="(usedMemory / 1024).toFixed(2) + ' GB'"></span>
+                        <div class="w-full h-1.5 bg-zinc-800 mt-3 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-500 transition-all duration-700" :style="'width: ' + (usedMemory / 10240 * 100) + '%'"></div>
+                        </div>
+                        <p class="text-[7px] text-zinc-500 mt-2 uppercase font-bold" x-text="Math.round(usedMemory) + ' MB / 10240 MB'"></p>
+                    </div>
+                </div>
+
+                <div class="p-4 border border-white/5 rounded-sm">
+                    <h4 class="text-[8px] font-black text-zinc-600 uppercase mb-3">Protocol Filter</h4>
+                    <div class="flex flex-col gap-1">
+                        <template x-for="cat in ['ALL', 'WIFI', 'SYSTEM', 'MANUAL', 'AUTH', 'GEO']">
+                            <button @click="filter = cat" 
+                                class="text-left text-[10px] font-black uppercase p-3 border border-transparent transition-all"
+                                :class="filter === cat ? 'bg-zinc-800 text-white border-l-[#d40511] border-l-2' : 'text-zinc-500 hover:text-zinc-300'"
+                                x-text="cat"></button>
+                        </template>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CONTENT GRID -->
+            <section class="lg:col-span-9 space-y-6" :class="(goLive || isOnline) ? '' : 'locked-state'">
+                <div x-show="goLive" class="bg-emerald-500/10 border border-emerald-500/20 p-4 mb-6">
+                    <p class="text-emerald-500 text-[10px] font-black uppercase tracking-[0.3em] text-center">ISOLATION PROTOCOL ACTIVE: ACCESSING LOCAL DECRYPTED CACHE ONLY</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <template x-for="item in filteredData" :key="item.id">
+                        <div class="group relative p-6 bg-[#111] border border-white/5 transition-all duration-300 hover:border-[#d40511]/40"
+                             :class="{'border-emerald-500 bg-emerald-500/5': item.status === 'DOWNLOADED', 'opacity-50': item.status === 'UNDOWNLOADED' && !isOnline}">
+                            
+                            <!-- Progress Bar -->
+                            <div class="absolute top-0 left-0 h-1 bg-zinc-800 w-full overflow-hidden" x-show="item.status === 'DOWNLOADING'">
+                                <div class="h-full bg-[#d40511] progress-stripe" :style="'width: ' + item.progress + '%'"></div>
+                            </div>
+
+                            <div class="flex justify-between items-start mb-4">
+                                <span class="text-[9px] font-black uppercase tracking-widest" :class="item.status === 'DOWNLOADED' ? 'text-emerald-500' : 'text-[#d40511]'" x-text="item.category"></span>
+                            </div>
+
+                            <h3 class="text-xl font-black mb-2 tracking-tighter" x-text="item.title"></h3>
+                            <p class="text-zinc-400 text-sm mb-6 line-clamp-2" x-text="item.content"></p>
+
+                            <!-- ACTIONS -->
+                            <div class="flex items-center gap-3">
+                                <template x-if="item.status === 'UNDOWNLOADED' && isOnline">
+                                    <button @click="startDownload(item)" class="bg-white text-black text-[9px] font-black uppercase px-4 py-2 hover:bg-[#d40511] hover:text-white transition-all">Secure Asset</button>
+                                </template>
+
+                                <template x-if="item.status === 'DOWNLOADING'">
+                                    <button @click="stopDownload(item)" class="bg-[#d40511] text-white text-[9px] font-black uppercase px-4 py-2 hover:bg-red-800 transition-all">Stop Download</button>
+                                </template>
+
+                                <template x-if="item.status === 'DOWNLOADED'">
+                                    <button @click="purgeItem(item)" class="border border-white/10 text-zinc-500 text-[9px] font-black uppercase px-4 py-2 hover:border-red-500 hover:text-red-500 transition-all">Wipe Cache</button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        function syncApp() {
+            return {
+                authorized: !!localStorage.getItem('os_token'),
+                isLogin: true,
+                loading: false,
+                isOnline: navigator.onLine,
+                goLive: false,
+                user: JSON.parse(localStorage.getItem('os_user') || '{}'),
+                filter: 'ALL',
+                usedMemory: 0, 
+                error: '',
+                authForm: { name: '', email: '', password: '' },
+                data: [
+                    { id: 'OS-101', title: 'Network Config Protocol', category: 'WIFI', content: 'Local network override scripts for tactical isolation.', status: 'UNDOWNLOADED', progress: 0, weight: 850 },
+                    { id: 'OS-102', title: 'Operational Asset Bundle', category: 'SYSTEM', content: 'Core system frameworks for localized execution.', status: 'UNDOWNLOADED', progress: 0, weight: 1500 },
+                    { id: 'OS-103', title: 'Emergency Override Fieldbook', category: 'MANUAL', content: 'Digital procedures for manual hardware bypass.', status: 'UNDOWNLOADED', progress: 0, weight: 220 },
+                    { id: 'OS-104', title: 'Auth-K Master Registry', category: 'AUTH', content: 'Offline decryption seeds for multi-device sync.', status: 'UNDOWNLOADED', progress: 0, weight: 180 },
+                    { id: 'OS-105', title: 'Topo-Mapping Delta V4', category: 'GEO', content: 'High-res volumetric terrain data for global nav.', status: 'UNDOWNLOADED', progress: 0, weight: 3400 },
+                ],
+
+                init() {
+                    window.addEventListener('online', () => this.isOnline = true);
+                    window.addEventListener('offline', () => this.isOnline = false);
+                    
+                    this.data.forEach(item => {
+                        const saved = localStorage.getItem(`os_data_${this.user.id}_${item.id}`);
+                        if (saved) {
+                            item.status = 'DOWNLOADED';
+                            this.usedMemory += item.weight;
+                        }
+                    });
+                },
+
+                handleAuth() {
+                    this.loading = true;
+                    setTimeout(() => {
+                        const user = { name: this.authForm.name || 'Operator', email: this.authForm.email, id: btoa(this.authForm.email) };
+                        localStorage.setItem('os_token', 'mock_token');
+                        localStorage.setItem('os_user', JSON.stringify(user));
+                        this.user = user;
+                        this.authorized = true;
+                        this.loading = false;
+                        this.init();
+                    }, 800);
+                },
+
+                logout() {
+                    localStorage.removeItem('os_token');
+                    localStorage.removeItem('os_user');
+                    this.authorized = false;
+                    this.goLive = false;
+                },
+
+                toggleGoLive(state) {
+                    if (state && !this.data.some(d => d.status === 'DOWNLOADED')) {
+                        alert("ERROR: NO OFFLINE DATA SECURED. DOWNLOAD ASSETS FIRST.");
+                        return;
+                    }
+                    this.goLive = state;
+                },
+
+                startDownload(item) {
+                    if (this.usedMemory + item.weight > 10240) {
+                        alert("MEMORY LIMIT REACHED (10GB). PURGE OLD ASSETS.");
+                        return;
+                    }
+                    item.status = 'DOWNLOADING';
+                    item.progress = 0;
+                    const itv = setInterval(() => {
+                        item.progress += 10;
+                        if (item.progress >= 100) {
+                            clearInterval(itv);
+                            item.status = 'DOWNLOADED';
+                            this.usedMemory += item.weight;
+                            localStorage.setItem(`os_data_${this.user.id}_${item.id}`, 'cached');
+                        }
+                    }, 200);
+                    item._itv = itv;
+                },
+
+                stopDownload(item) {
+                    if (item._itv) clearInterval(item._itv);
+                    item.status = 'UNDOWNLOADED';
+                    item.progress = 0;
+                },
+
+                purgeItem(item) {
+                    item.status = 'UNDOWNLOADED';
+                    this.usedMemory = Math.max(0, this.usedMemory - item.weight);
+                    localStorage.removeItem(`os_data_${this.user.id}_${item.id}`);
+                },
+
+                get filteredData() {
+                    let d = this.data;
+                    if (this.goLive) d = d.filter(x => x.status === 'DOWNLOADED');
+                    if (this.filter !== 'ALL') d = d.filter(x => x.category === this.filter);
+                    return d;
+                }
+            }
+        }
+    </script>
 </body>
 </html>
